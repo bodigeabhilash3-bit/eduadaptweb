@@ -8,6 +8,7 @@ performance snapshot.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 
 from database import get_db
 from models.schemas import AnalysisRequest, AnalysisResponse
@@ -17,6 +18,7 @@ from services.llm_integration import generate_feedback
 from services.weak_areas import update_student_performance
 
 router = APIRouter(tags=["Analysis"])
+logger = logging.getLogger("eduadapt.routes.analysis")
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
@@ -41,21 +43,26 @@ def analyze_performance(request: AnalysisRequest, db: Session = Depends(get_db))
 
     # Store the test data as answer records (if not already from a test submission)
     # This allows /analyze to be used independently of the test flow
-    for item in request.test_data:
-        record = AnswerRecord(
-            attempt_id=None,  # Not tied to a specific test attempt
-            student_id=request.student_id,
-            question_id=item.question_id,
-            topic=item.topic,
-            difficulty=item.difficulty.value,
-            is_correct=item.is_correct,
-            time_taken=item.time_taken,
-        )
-        db.add(record)
-    db.commit()
+    try:
+        for item in request.test_data:
+            record = AnswerRecord(
+                attempt_id=None,  # Not tied to a specific test attempt
+                student_id=request.student_id,
+                question_id=item.question_id,
+                topic=item.topic,
+                difficulty=item.difficulty.value,
+                is_correct=item.is_correct,
+                time_taken=item.time_taken,
+            )
+            db.add(record)
+        db.commit()
 
-    # Update cached performance
-    update_student_performance(db, request.student_id)
+        # Update cached performance
+        update_student_performance(db, request.student_id)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to store analysis records / update performance")
+        raise HTTPException(status_code=500, detail="Failed to analyze performance")
 
     # Run analysis on the provided data
     analysis = generate_full_analysis(

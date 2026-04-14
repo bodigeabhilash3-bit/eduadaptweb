@@ -9,6 +9,7 @@ These are utility/admin endpoints for managing the question bank.
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+import logging
 
 from database import get_db
 from models.schemas import AddQuestionRequest, QuestionWithAnswer
@@ -22,6 +23,7 @@ from services.question_bank import (
 )
 
 router = APIRouter(tags=["Question Bank"])
+logger = logging.getLogger("eduadapt.routes.questions")
 
 
 @router.get("/questions", response_model=list[QuestionWithAnswer])
@@ -65,15 +67,22 @@ def list_questions(
 @router.post("/questions", response_model=QuestionWithAnswer)
 def create_question(request: AddQuestionRequest, db: Session = Depends(get_db)):
     """Add a new question to the question bank."""
-    q = add_question(db, request)
-    return QuestionWithAnswer(
-        id=q.id,
-        question_text=q.question_text,
-        options=q.options,
-        answer=q.answer,
-        topic=q.topic,
-        difficulty=q.difficulty,
-    )
+    try:
+        q = add_question(db, request)
+        return QuestionWithAnswer(
+            id=q.id,
+            question_text=q.question_text,
+            options=q.options,
+            answer=q.answer,
+            topic=q.topic,
+            difficulty=q.difficulty,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to create question")
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail="Failed to create question")
 
 
 @router.get("/questions/count")

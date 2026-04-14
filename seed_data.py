@@ -10,6 +10,7 @@ automatically on app startup if the question bank is empty.
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from models.db_models import Question, Student
 
 
@@ -18,7 +19,10 @@ def seed_questions(db: Session) -> int:
     Insert all seed questions into a fresh database.
     Returns the number of questions inserted.
     """
-
+    # Idempotent: only seed when the table is empty
+    existing = db.query(func.count(Question.id)).scalar() or 0
+    if existing > 0:
+        return 0
 
     questions = _build_question_list()
 
@@ -37,13 +41,41 @@ def seed_questions(db: Session) -> int:
 
 def seed_sample_student(db: Session) -> int | None:
     """Create a sample student. Returns student ID."""
-
+    # Idempotent: only create demo student when there are no students
+    existing = db.query(func.count(Student.id)).scalar() or 0
+    if existing > 0:
+        return None
 
     student = Student(name="Demo Student")
     db.add(student)
     db.commit()
     db.refresh(student)
     return student.id
+
+
+def seed_if_empty(db: Session) -> dict:
+    """
+    Seed initial data only when the database is empty.
+    Prevents duplicates across restarts and deployments.
+    """
+    q_count = db.query(func.count(Question.id)).scalar() or 0
+    s_count = db.query(func.count(Student.id)).scalar() or 0
+    if q_count > 0 or s_count > 0:
+        return {
+            "seeded": False,
+            "questions_inserted": 0,
+            "sample_student_id": None,
+            "reason": "database not empty",
+        }
+
+    inserted = seed_questions(db)
+    student_id = seed_sample_student(db)
+    return {
+        "seeded": True,
+        "questions_inserted": inserted,
+        "sample_student_id": student_id,
+        "reason": "database empty",
+    }
 
 
 def _build_question_list() -> list[dict]:

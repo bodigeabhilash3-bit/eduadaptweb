@@ -8,12 +8,14 @@ into those endpoints.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 
 from database import get_db
 from models.db_models import Student, StudentPerformance
 from models.schemas import CreateStudentRequest, StudentOut, StudentPerformanceSnapshot
 
 router = APIRouter(tags=["Students"])
+logger = logging.getLogger("eduadapt.routes.students")
 
 
 @router.get("/students", response_model=list[StudentOut])
@@ -26,16 +28,21 @@ def list_students(db: Session = Depends(get_db)):
 @router.post("/students", response_model=StudentOut, status_code=201)
 def create_student(request: CreateStudentRequest, db: Session = Depends(get_db)):
     """Register a new student; returns `id` to use with other endpoints."""
-    student = Student(
-        name=request.name.strip(),
-        email=request.email,
-        phone=request.phone,
-        stream=request.stream,
-    )
-    db.add(student)
-    db.commit()
-    db.refresh(student)
-    return student
+    try:
+        student = Student(
+            name=request.name.strip(),
+            email=request.email,
+            phone=request.phone,
+            stream=request.stream,
+        )
+        db.add(student)
+        db.commit()
+        db.refresh(student)
+        return student
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to create student")
+        raise HTTPException(status_code=500, detail="Failed to create student")
 
 
 @router.get("/students/{student_id}", response_model=StudentOut)

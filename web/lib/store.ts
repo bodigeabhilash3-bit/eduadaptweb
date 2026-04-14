@@ -33,7 +33,7 @@ export interface ChatMessage {
 
 interface AppState {
   // Current view
-  currentView: 'register' | 'quiz' | 'progress' | 'topics' | 'chat';
+  currentView: 'home' | 'register' | 'quiz' | 'progress' | 'topics' | 'chat';
   setCurrentView: (view: AppState['currentView']) => void;
 
   // Student (from backend)
@@ -77,7 +77,7 @@ interface AppState {
 }
 
 const initialState = {
-  currentView: 'register' as const,
+  currentView: 'home' as const,
   student: null,
   mood: 'okay' as Mood,
   lastMoodCheck: 0,

@@ -1,19 +1,48 @@
 """
 Database configuration module.
-Uses SQLite for lightweight, file-based storage.
+Uses DATABASE_URL to select SQLite/PostgreSQL.
 SQLAlchemy handles ORM mapping and session management.
 """
 
+import os
+from sqlalchemy.engine import make_url
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# SQLite database file stored alongside the app
-DATABASE_URL = "sqlite:///./eduadapt.db"
+# Database URL (supports Render/Fly/etc). Defaults to local SQLite file.
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./eduadapt.db")
+
+
+def _normalize_database_url(raw: str) -> str:
+    """
+    Render managed PostgreSQL often provides URLs like:
+      postgres://user:pass@host:port/db
+
+    SQLAlchemy expects:
+      postgresql+psycopg://user:pass@host:port/db
+    """
+    url = raw.strip()
+    if url.startswith("postgres://"):
+        url = "postgresql+psycopg://" + url[len("postgres://") :]
+    return url
+
+
+_db_url = make_url(_normalize_database_url(DATABASE_URL))
 
 # Create engine with check_same_thread=False for FastAPI's async compatibility
+_connect_args: dict = {}
+if _db_url.drivername.startswith("sqlite"):
+    _connect_args["check_same_thread"] = False
+elif _db_url.drivername.startswith("postgresql"):
+    # Render Postgres requires SSL on most plans. If `sslmode` isn't in the URL,
+    # default to `require` to avoid connection failures.
+    if "sslmode" not in (_db_url.query or {}):
+        _connect_args["sslmode"] = "require"
+
 engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Required for SQLite + FastAPI
+    _db_url,
+    connect_args=_connect_args,
+    pool_pre_ping=True,
     echo=False,  # Set True for SQL debug logging
 )
 

@@ -93,6 +93,58 @@ npm run dev
 
 ---
 
+## 🌍 Deploy & Share (free hosting)
+
+This project is **FastAPI (backend)** + **Next.js (frontend)**. For a shareable link, the easiest free setup is:
+
+- **Frontend**: Vercel (best for Next.js)
+- **Backend**: Render (simple FastAPI deploy; may sleep on free tier)
+
+### 1) Deploy the backend (FastAPI) on Render
+
+- Create a new Render **Web Service** from your GitHub repo
+- **Runtime**: Python
+- **Start command**:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+- Add an environment variable (optional): `PYTHON_VERSION=3.11`
+- After deploy, copy your backend URL (example: `https://your-api.onrender.com`)
+
+### 2) Deploy the frontend (Next.js) on Vercel
+
+- Import the repo into Vercel
+- Set **Root Directory** to `web`
+- Add Environment Variable:
+  - `NEXT_PUBLIC_API_URL` = your Render backend URL (no trailing slash)
+- Deploy and share the Vercel link
+
+### 3) Run locally (step-by-step)
+
+In one terminal (backend):
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In another terminal (frontend):
+
+```bash
+cd web
+npm install
+copy .env.local.example .env.local
+npm run dev
+```
+
+### Notes
+- For Android builds (Capacitor), set `NEXT_PUBLIC_API_URL` to the hosted backend URL (HTTPS recommended).
+- If your backend is sleeping on a free tier, the first request after idle may be slow.
+
+---
+
 ## 📁 Project Structure
 
 ```

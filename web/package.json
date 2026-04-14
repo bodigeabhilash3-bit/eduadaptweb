@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:app": "next build",
     "start": "next start",
+    "cap:copy": "cap copy",
+    "cap:sync": "cap sync",
+    "android": "cap open android",
+    "android:build": "next build && cap copy android",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -61,6 +66,9 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.4.2",
+    "@capacitor/cli": "^7.4.2",
+    "@capacitor/core": "^7.4.2",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "^22",
     "@types/react": "19.2.14",

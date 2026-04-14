@@ -1,6 +1,7 @@
 'use client';
 
 import { Navigation } from '@/components/navigation';
+import { Landing } from '@/components/landing';
 import { RegistrationForm } from '@/components/registration-form';
 import { QuizSection } from '@/components/quiz-section';
 import { ProgressDashboard } from '@/components/progress-dashboard';
@@ -14,6 +15,8 @@ export default function Home() {
 
   const renderView = () => {
     switch (currentView) {
+      case 'home':
+        return <Landing />;
       case 'register':
         return <RegistrationForm />;
       case 'quiz':
@@ -25,7 +28,7 @@ export default function Home() {
       case 'chat':
         return <AIChatbot />;
       default:
-        return <RegistrationForm />;
+        return <Landing />;
     }
   };
 

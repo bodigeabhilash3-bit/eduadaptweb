@@ -16,12 +16,14 @@ Endpoints:
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 
 from database import get_db
 from models.db_models import Student, MoodLog
 from models.schemas import UpdateMoodRequest, MoodResponse, MoodLogEntry
 
 router = APIRouter(tags=["Mood"])
+logger = logging.getLogger("eduadapt.routes.mood")
 
 # Mood → pet message mapping
 _MOOD_MESSAGES: dict[str, str] = {
@@ -40,13 +42,18 @@ def update_mood(request: UpdateMoodRequest, db: Session = Depends(get_db)):
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    student.mood = request.mood.value
-    db.add(MoodLog(
-        student_id=request.student_id,
-        mood=request.mood.value,
-        context=request.context,
-    ))
-    db.commit()
+    try:
+        student.mood = request.mood.value
+        db.add(MoodLog(
+            student_id=request.student_id,
+            mood=request.mood.value,
+            context=request.context,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to update mood")
+        raise HTTPException(status_code=500, detail="Failed to update mood")
 
     return MoodResponse(
         student_id=request.student_id,

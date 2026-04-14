@@ -14,7 +14,8 @@ const MOOD_EMOJIS: Record<string, string> = {
 };
 
 const navItems = [
-  { id: 'register', label: 'Home', icon: Home },
+  { id: 'home', label: 'Home', icon: Home },
+  { id: 'register', label: 'Start', icon: GraduationCap },
   { id: 'quiz', label: 'Assessment', icon: BookOpen },
   { id: 'progress', label: 'Progress', icon: BarChart3 },
   { id: 'topics', label: 'Study Plan', icon: Calendar },
@@ -44,7 +45,7 @@ export function Navigation() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
-            const isDisabled = !student && item.id !== 'register';
+            const isDisabled = !student && item.id !== 'home' && item.id !== 'register';
 
             return (
               <Button
@@ -91,7 +92,7 @@ export function Navigation() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
-          const isDisabled = !student && item.id !== 'register';
+          const isDisabled = !student && item.id !== 'home' && item.id !== 'register';
 
           return (
             <button

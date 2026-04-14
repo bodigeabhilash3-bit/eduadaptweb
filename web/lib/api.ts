@@ -7,6 +7,15 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+if (process.env.NODE_ENV === 'production') {
+  // In production we expect an explicit deployed API URL (HTTPS recommended).
+  if (!process.env.NEXT_PUBLIC_API_URL) {
+    throw new Error(
+      'Missing NEXT_PUBLIC_API_URL. Set it in your deployment environment.'
+    );
+  }
+}
+
 // ─── Helper ────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {

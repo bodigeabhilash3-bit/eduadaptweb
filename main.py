@@ -14,20 +14,25 @@ Run with:
 
 import sys
 import os
+import logging
 
 # Ensure the project root is on the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 
 from config import load_dotenv_if_present, get_cors_settings
-from database import engine, Base, SessionLocal
+from database import engine, Base, SessionLocal, migrate_sqlite_answer_records_attempt_nullable
 from routes import analysis, plan, test, questions, students, mood
 
 load_dotenv_if_present()
-from seed_data import seed_questions, seed_sample_student
+from seed_data import seed_if_empty
 
 
 # ─── Lifespan: startup/shutdown logic ────────────────────────────────────────
@@ -35,26 +40,30 @@ from seed_data import seed_questions, seed_sample_student
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Startup: Drop all tables, re-create them, and seed fresh data every time.
-    This ensures a clean demo environment on each launch.
-    Shutdown: (nothing to clean up for SQLite)
+    Startup:
+      - Create tables if they don't exist (safe on restarts)
+      - Run lightweight SQLite migration if needed
+      - Seed initial data ONLY if the database is empty (no duplicates)
+    Shutdown: (nothing to clean up for SQLite / simple DB usage)
     """
-    # Drop all existing tables so every launch starts fresh
-    Base.metadata.drop_all(bind=engine)
-    print("[RESET] Dropped all existing tables — starting fresh")
+    logger = logging.getLogger("eduadapt")
 
-    # Re-create all tables
+    # Create tables if missing (never drops data)
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite_answer_records_attempt_nullable(engine)
 
-    # Seed question bank and sample student
+    # Seed only if empty (idempotent)
     db = SessionLocal()
     try:
-        num_seeded = seed_questions(db)
-        student_id = seed_sample_student(db)
-
-        print(f"[OK] Seeded {num_seeded} questions into the question bank")
-        if student_id:
-            print(f"[OK] Created sample student with ID: {student_id}")
+        seeded = seed_if_empty(db)
+        if seeded["seeded"]:
+            logger.info(
+                "Seeded initial data: %s questions; sample_student_id=%s",
+                seeded["questions_inserted"],
+                seeded["sample_student_id"],
+            )
+        else:
+            logger.info("Skipping seed (%s)", seeded.get("reason", "not needed"))
     finally:
         db.close()
 
@@ -64,6 +73,11 @@ async def lifespan(app: FastAPI):
 
 
 # ─── App instance ────────────────────────────────────────────────────────────
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
 
 app = FastAPI(
     title="EduAdapt — Personalized Entrance Exam Coach",
@@ -75,6 +89,46 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ─── Basic request logging middleware ────────────────────────────────────────
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger = logging.getLogger("eduadapt.http")
+        try:
+            response = await call_next(request)
+            logger.info("%s %s -> %s", request.method, request.url.path, response.status_code)
+            return response
+        except Exception:
+            logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
+
+app.add_middleware(RequestLogMiddleware)
+
+# ─── Error handlers (prevents ugly crashes) ──────────────────────────────────
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logging.getLogger("eduadapt").warning(
+        "Validation error on %s %s: %s", request.method, request.url.path, exc.errors()
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logging.getLogger("eduadapt").exception(
+        "Database error on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Database error"},
+    )
 
 # ─── CORS Middleware ─────────────────────────────────────────────────────────
 # Set EDUADAPT_CORS_ORIGINS for your teammate's dev server (see .env.example).
@@ -125,3 +179,8 @@ def health_check():
             "GET /docs": "Interactive API documentation (Swagger UI)",
         },
     }
+
+
+@app.get("/health", tags=["Health"])
+def health():
+    return {"status": "ok"}
